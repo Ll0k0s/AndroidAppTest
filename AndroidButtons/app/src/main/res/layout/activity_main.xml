@@ -72,7 +72,7 @@
                         android:layout_height="48sp"
                         android:ems="10"
                         android:hint="192.168.2.63"
-                        android:inputType="number" />
+                        android:inputType="text" />
 
                     <TableRow
                         android:layout_width="match_parent"

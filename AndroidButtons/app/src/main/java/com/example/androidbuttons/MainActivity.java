@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(ACTION_USB_PERMISSION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        registerReceiver(usbReceiver, filter);
+        registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
 
         switchUART.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isChecked) {
