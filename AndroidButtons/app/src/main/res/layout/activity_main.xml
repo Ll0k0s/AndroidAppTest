@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextView
+            android:id="@+id/text_USB_UART"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:text="@string/USB_UART"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.501"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/constraintLayout2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.51"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/text_TCP">
+
+            <Switch
+                android:id="@+id/switch_TCP"
+                android:layout_width="75dp"
+                android:layout_height="70dp"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/tableLayout"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintVertical_bias="0.569"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <TableLayout
+                android:id="@+id/tableLayout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/switch_TCP"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <TableRow
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <TextView
+                        android:id="@+id/text_addrTCP"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/addrTCP"
+                        android:textAlignment="viewStart"
+                        android:textSize="20sp" />
+
+                    <EditText
+                        android:id="@+id/value_addrTCP"
+                        android:layout_width="match_parent"
+                        android:layout_height="48sp"
+                        android:ems="10"
+                        android:hint="192.168.2.63"
+                        android:inputType="number" />
+
+                    <TableRow
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                </TableRow>
+
+                <TableRow
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <TextView
+                        android:id="@+id/text_portTCP"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="00dp"
+                        android:text="@string/portTCP"
+                        android:textAlignment="viewStart"
+                        android:textSize="20sp" />
+
+                    <EditText
+                        android:id="@+id/value_portTCP"
+                        android:layout_width="124dp"
+                        android:layout_height="48sp"
+                        android:ems="10"
+                        android:hint="9000"
+                        android:inputType="number" />
+                </TableRow>
+
+                <TableRow
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <TableRow
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </TableLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <TextView
+            android:id="@+id/text_TCP"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/TCP"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.498"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tableLayout2" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/constraintLayout"
+            android:layout_width="300sp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/constraintLayout2">
+
+            <Switch
+                android:id="@+id/switch_L1"
+                android:layout_width="100sp"
+                android:layout_height="60sp"
+                android:layout_marginTop="10dp"
+                android:scaleX="2"
+                android:scaleY="2"
+                android:text="L1"
+                android:textAlignment="viewEnd"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/switch_L2"
+                android:layout_width="100sp"
+                android:layout_height="60sp"
+                android:layout_marginTop="10dp"
+                android:scaleX="2"
+                android:scaleY="2"
+                android:text="L2"
+                android:textAlignment="viewEnd"
+                android:textStyle="bold"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/switch_L1"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/switch_L3"
+                android:layout_width="100sp"
+                android:layout_height="60sp"
+                android:layout_marginTop="10dp"
+                android:scaleX="2"
+                android:scaleY="2"
+                android:text="L3"
+                android:textAlignment="viewEnd"
+                android:textStyle="bold"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/switch_L2"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/switch_L4"
+                android:layout_width="100sp"
+                android:layout_height="60sp"
+                android:layout_marginTop="10dp"
+                android:scaleX="2"
+                android:scaleY="2"
+                android:text="L4"
+                android:textAlignment="viewEnd"
+                android:textStyle="bold"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/switch_L3"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/switch_L5"
+                android:layout_width="100sp"
+                android:layout_height="60sp"
+                android:layout_marginTop="10dp"
+                android:scaleX="2"
+                android:scaleY="2"
+                android:text="L5"
+                android:textAlignment="viewEnd"
+                android:textStyle="bold"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/switch_L4"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/switch_L6"
+                android:layout_width="100sp"
+                android:layout_height="60sp"
+                android:layout_marginTop="10dp"
+                android:scaleX="2"
+                android:scaleY="2"
+                android:text="L6"
+                android:textAlignment="viewEnd"
+                android:textStyle="bold"
+                android:thumbTint="@color/switch_thumb"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/switch_L5"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <TableLayout
+            android:id="@+id/tableLayout2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/text_USB_UART">
+
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/text_BaudRate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/baudRate"
+                    android:textSize="20sp" />
+
+                <EditText
+                    android:id="@+id/value_baudRate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:ems="10"
+                    android:hint="115200"
+                    android:inputType="number" />
+
+                <Switch
+                    android:id="@+id/switch_UART"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:showText="false"
+                    android:splitTrack="true"
+                    android:thumbTint="@color/switch_thumb"
+                    tools:checked="true"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+            </TableRow>
+
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </TableLayout>
+
+        <TextView
+            android:id="@+id/text_console"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="15dp"
+            android:layout_marginTop="211dp"
+            android:layout_marginEnd="39dp"
+            android:layout_marginBottom="230dp"
+            android:text="..."
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/constraintLayout"
+            app:layout_constraintTop_toBottomOf="@+id/constraintLayout2" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</LinearLayout>

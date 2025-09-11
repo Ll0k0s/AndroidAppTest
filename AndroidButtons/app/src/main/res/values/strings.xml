@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">AndroidButtons</string>
+    <string name="TCP">TCP</string>
+    <string name="USB_UART">USB UART</string>
+    <string name="addrTCP">Address:</string>
+    <string name="portTCP">Port:</string>
+    <string name="baudRate">Baud Rate:</string>
+    <string name="but_connect">Connect</string>
+</resources>
