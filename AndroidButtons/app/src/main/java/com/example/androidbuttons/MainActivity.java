@@ -23,7 +23,13 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.HashMap;
+import java.util.Arrays;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
@@ -36,6 +42,11 @@ public class MainActivity extends AppCompatActivity {
     private SerialInputOutputManager ioManager;
     private PendingIntent permissionIntent;
     private static final String ACTION_USB_PERMISSION = "com.example.androidbuttons.USB_PERMISSION";
+
+    private ServerSocket serverSocket;
+    private Socket clientSocket;
+    private ExecutorService tcpExecutor;
+    private OutputStream clientOutput;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         @Override
