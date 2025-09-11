@@ -27,14 +27,16 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Arrays;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private EditText valueBaudRate;
+    private EditText valueAddrTCP;
+    private EditText valuePortTCP;
     private Switch switchUART;
+    private Switch switchTCP;
     private TextView textConsole;
 
     private UsbManager usbManager;
@@ -43,10 +45,9 @@ public class MainActivity extends AppCompatActivity {
     private PendingIntent permissionIntent;
     private static final String ACTION_USB_PERMISSION = "com.example.androidbuttons.USB_PERMISSION";
 
-    private ServerSocket serverSocket;
-    private Socket clientSocket;
+    private Socket tcpSocket;
     private ExecutorService tcpExecutor;
-    private OutputStream clientOutput;
+    private OutputStream tcpOutput;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         @Override
@@ -81,7 +82,10 @@ public class MainActivity extends AppCompatActivity {
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
         valueBaudRate = findViewById(R.id.value_baudRate);
+        valueAddrTCP = findViewById(R.id.value_addrTCP);
+        valuePortTCP = findViewById(R.id.value_portTCP);
         switchUART = findViewById(R.id.switch_UART);
+        switchTCP = findViewById(R.id.switch_TCP);
         textConsole = findViewById(R.id.text_console);
         textConsole.setMovementMethod(new ScrollingMovementMethod());
 
@@ -97,6 +101,14 @@ public class MainActivity extends AppCompatActivity {
                 discoverAndConnect();
             } else {
                 disconnectSerial();
+            }
+        });
+
+        switchTCP.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                startTcpClient();
+            } else {
+                stopTcpClient();
             }
         });
     }
@@ -156,6 +168,49 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void startTcpClient() {
+        tcpExecutor = Executors.newSingleThreadExecutor();
+        tcpExecutor.submit(() -> {
+            try {
+                String host = valueAddrTCP.getText().toString();
+                int port = Integer.parseInt(valuePortTCP.getText().toString());
+                tcpSocket = new Socket(host, port);
+                tcpOutput = tcpSocket.getOutputStream();
+                InputStream in = tcpSocket.getInputStream();
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "TCP Client connected", Toast.LENGTH_SHORT).show());
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = in.read(buffer)) != -1 && !Thread.currentThread().isInterrupted()) {
+                    if (serialPort != null) {
+                        byte[] data = Arrays.copyOf(buffer, len);
+                        try {
+                            serialPort.write(data, 1000);
+                        } catch (IOException ignored) {
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "TCP Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> switchTCP.setChecked(false));
+            }
+        });
+    }
+
+    private void stopTcpClient() {
+        if (tcpExecutor != null) {
+            tcpExecutor.shutdownNow();
+            tcpExecutor = null;
+        }
+        if (tcpSocket != null) {
+            try {
+                tcpSocket.close();
+            } catch (IOException ignored) {
+            }
+            tcpSocket = null;
+        }
+        tcpOutput = null;
+    }
+
     private final SerialInputOutputManager.Listener dataListener = new SerialInputOutputManager.Listener() {
         @Override
         public void onNewData(byte[] data) {
@@ -165,6 +220,13 @@ public class MainActivity extends AppCompatActivity {
                 if (scrollAmount > 0) textConsole.scrollTo(0, scrollAmount);
                 else textConsole.scrollTo(0, 0);
             });
+            if (tcpOutput != null) {
+                try {
+                    tcpOutput.write(data);
+                    tcpOutput.flush();
+                } catch (IOException ignored) {
+                }
+            }
         }
 
         @Override
@@ -175,6 +237,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void disconnectSerial() {
         stopIoManager();
+        stopTcpClient();
+        if (switchTCP != null) {
+            switchTCP.setChecked(false);
+        }
         if (serialPort != null) {
             try {
                 serialPort.close();
