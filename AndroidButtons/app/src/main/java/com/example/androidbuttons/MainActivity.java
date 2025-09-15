@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
@@ -48,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private Socket tcpSocket;
     private ExecutorService tcpExecutor;
     private OutputStream tcpOutput;
+    private boolean usbReceiverRegistered = false;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         @Override
@@ -94,7 +96,12 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(ACTION_USB_PERMISSION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(usbReceiver, filter);
+        }
+        usbReceiverRegistered = true;
 
         switchUART.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isChecked) {
@@ -254,7 +261,36 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(usbReceiver);
+        if (usbReceiverRegistered) {
+            try {
+                unregisterReceiver(usbReceiver);
+            } catch (IllegalArgumentException ignored) {
+            }
+            usbReceiverRegistered = false;
+        }
         disconnectSerial();
+    }
+
+    private void bridgeUartToTcp() {
+        Executors.newSingleThreadExecutor().submit(() -> {
+            byte[] buffer = new byte[1024];
+            while (!Thread.currentThread().isInterrupted() && serialPort != null) {
+                try {
+                    int len = serialPort.read(buffer, 1000);
+                    if (len > 0 && tcpOutput != null) {
+                        tcpOutput.write(buffer, 0, len);
+                        tcpOutput.flush();
+
+                        // Также выводим в консоль
+                        final String data = new String(buffer, 0, len);
+                        runOnUiThread(() -> {
+                            textConsole.append("[UART→TCP] " + data);
+                        });
+                    }
+                } catch (IOException e) {
+                    // Игнорируем ошибки чтения/записи
+                }
+            }
+        });
     }
 }
