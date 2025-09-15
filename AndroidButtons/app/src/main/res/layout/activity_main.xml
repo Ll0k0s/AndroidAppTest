@@ -72,11 +72,10 @@
                         android:layout_height="48sp"
                         android:ems="10"
                         android:hint="192.168.2.63"
-                        android:inputType="text" />
+                        android:inputType="text"
+                        android:text="192.168.2.63" />
 
-                    <TableRow
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent" />
+                    <!-- Removed nested TableRow inside a TableRow (invalid) -->
 
                 </TableRow>
 
@@ -99,7 +98,8 @@
                         android:layout_height="48sp"
                         android:ems="10"
                         android:hint="9000"
-                        android:inputType="number" />
+                        android:inputType="number"
+                        android:text="9000" />
                 </TableRow>
 
                 <TableRow
@@ -258,7 +258,8 @@
                     android:layout_height="48dp"
                     android:ems="10"
                     android:hint="115200"
-                    android:inputType="number" />
+                    android:inputType="number"
+                    android:text="115200" />
 
                 <Switch
                     android:id="@+id/switch_UART"
