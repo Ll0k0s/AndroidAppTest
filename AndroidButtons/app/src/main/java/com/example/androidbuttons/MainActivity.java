@@ -39,11 +39,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 }
-                uiBuffer.offer("[USB-BC] permission: granted=" + granted + ", device=" + (device != null ? device.getDeviceName() : "null") + "\n");
-                if (granted) {
-                    uiBuffer.offer("[UART] USB permission GRANTED by user\n");
-                    runOnUiThread(() -> toast("Доступ к USB-устройству предоставлен"));
-                }
+                // Без логов и тостов: просто передаём результат
                 usbUartManager.onUsbPermissionResult(granted, device);
             } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) {
                 android.hardware.usb.UsbDevice device = null;
@@ -52,12 +48,8 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 }
-                uiBuffer.offer("[USB-BC] ATTACHED: device=" + (device != null ? device.getDeviceName() : "null") + "\n");
-                if (binding.switchUART.isChecked()) {
-                    int baud;
-                    try { baud = Integer.parseInt(String.valueOf(binding.valueBaudRate.getText())); } catch (Exception e) { baud = 9600; }
-                    usbUartManager.connect(baud);
-                }
+                // Инициируем подключение сразу (менеджер сам отфильтрует, если уже подключается/подключен)
+                usbUartManager.connectAuto();
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(intent.getAction())) {
                 android.hardware.usb.UsbDevice device = null;
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -65,7 +57,6 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 }
-                uiBuffer.offer("[USB-BC] DETACHED: device=" + (device != null ? device.getDeviceName() : "null") + "\n");
                 usbUartManager.disconnect("usb-detached");
             }
         }
@@ -78,17 +69,17 @@ public class MainActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
 
         // UI
-        binding.textConsole.setMovementMethod(new ScrollingMovementMethod());
+    binding.textConsole.setMovementMethod(new ScrollingMovementMethod());
         binding.progressBarTCP.setVisibility(View.GONE);
         binding.progressBarUART.setVisibility(View.GONE);
 
-    uiBuffer = new DataBuffer(256, data -> runOnUiThread(() -> appendToConsole(data)));
+    uiBuffer = new DataBuffer(256, data -> ui(() -> appendToConsole(data)));
 
         tcpManager = new TcpManager(
-                () -> runOnUiThread(() -> binding.progressBarTCP.setVisibility(View.VISIBLE)),
-                () -> runOnUiThread(() -> binding.progressBarTCP.setVisibility(View.GONE)),
+        () -> ui(() -> binding.progressBarTCP.setVisibility(View.VISIBLE)),
+        () -> ui(() -> binding.progressBarTCP.setVisibility(View.GONE)),
         data -> uiBuffer.offer("[TCP→] " + data),
-        error -> runOnUiThread(() -> toast("TCP error: " + error))
+    error -> ui(() -> toast("TCP error: " + error))
         );
 
     Intent permIntent = new Intent(ACTION_USB_PERMISSION);
@@ -102,11 +93,18 @@ public class MainActivity extends AppCompatActivity {
     usbUartManager = new UsbUartManager(
                 this,
                 permissionIntent,
-        () -> runOnUiThread(() -> binding.progressBarUART.setVisibility(View.VISIBLE)),
-        () -> runOnUiThread(() -> binding.progressBarUART.setVisibility(View.GONE)),
-    data -> uiBuffer.offer("[UART→] " + data),
-    error -> runOnUiThread(() -> toast("UART error: " + error)),
-    status -> uiBuffer.offer("[UART] " + status + "\n")
+        () -> ui(() -> binding.progressBarUART.setVisibility(View.VISIBLE)),
+        () -> ui(() -> binding.progressBarUART.setVisibility(View.GONE)),
+    data -> uiBuffer.offer(data),
+    error -> { /* без тостов и логов об ошибках UART */ },
+    status -> {
+        // Показываем только тосты включения/отключения, статус в консоль не выводим
+        if (status.contains("start IO")) {
+            ui(() -> toast("UART включен"));
+        } else if (status.contains("disconnect")) {
+            ui(() -> toast("UART отключен"));
+        }
+    }
         );
 
         // Register USB broadcast receiver for the whole Activity lifetime to not miss permission result
@@ -121,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
         }
         receiverRegistered = true;
 
-        // Switches
+    // Switches
         binding.switchTCP.setOnCheckedChangeListener((b, checked) -> {
             if (checked) {
                 String host = String.valueOf(binding.valueAddrTCP.getText()).trim();
@@ -139,23 +137,32 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        binding.switchUART.setOnCheckedChangeListener((b, checked) -> {
-            if (checked) {
-                int baud;
-                try { baud = Integer.parseInt(String.valueOf(binding.valueBaudRate.getText())); } catch (Exception e) { baud = 9600; }
-                uiBuffer.offer("[UART-UI] toggle=ON baud=" + baud + "\n");
-                usbUartManager.connect(baud);
-            } else {
-                uiBuffer.offer("[UART-UI] toggle=OFF\n");
-                usbUartManager.disconnect("user-toggle-off");
+        // UART теперь работает в авто-режиме, свитч не требуется
+        int initBaud;
+        try { initBaud = Integer.parseInt(String.valueOf(binding.valueBaudRate.getText())); }
+        catch (Exception e) { initBaud = 9600; }
+        usbUartManager.enableAutoConnect(initBaud);
+
+        // Подписка на изменения baud из поля, чтобы актуализировать autoBaud на лету
+        binding.valueBaudRate.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                int b;
+                try { b = Integer.parseInt(String.valueOf(s)); } catch (Exception e) { b = 9600; }
+                usbUartManager.setAutoBaud(b);
             }
         });
+        // По желанию можно визуально отключить свитч
+        binding.switchUART.setChecked(true);
+        binding.switchUART.setEnabled(false);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         tcpManager.disconnect();
+        usbUartManager.disableAutoConnect();
         usbUartManager.disconnect("activity-destroy");
         if (receiverRegistered) {
             try { unregisterReceiver(usbPermissionReceiver); } catch (Exception ignored) {}
@@ -174,5 +181,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void toast(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    private void ui(Runnable action) {
+        if (action == null) return;
+        if (isFinishing()) return;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            if (isDestroyed()) return;
+        }
+        runOnUiThread(() -> {
+            if (isFinishing()) return;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
+                if (isDestroyed()) return;
+            }
+            try { action.run(); } catch (Throwable ignored) {}
+        });
     }
 }

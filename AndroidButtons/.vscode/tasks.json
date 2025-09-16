@@ -132,6 +132,39 @@
 				"$gradle"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Gradle assembleDebug",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug"
+			],
+			"problemMatcher": [
+				"$gradle"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug"
+			],
+			"problemMatcher": [
+				"$gradle"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug"
+			],
+			"problemMatcher": [
+				"$gradle"
+			]
 		}
 	]
 }

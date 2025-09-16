@@ -28,6 +28,9 @@ class TcpManager {
     private Future<?> task;
     private Socket socket;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    // Управление показом индикатора: защищаем от повторных вызовов
+    private final Object uiLock = new Object();
+    private boolean progressShown = false;
 
     TcpManager(Runnable onStart, Runnable onStop,
                StringConsumer onData,
@@ -41,11 +44,14 @@ class TcpManager {
     synchronized void connect(String host, int port) {
         disconnect();
         running.set(true);
-        onStart.run();
+        showProgress();
         task = executor.submit(() -> {
             try {
                 socket = new Socket();
                 socket.connect(new InetSocketAddress(host, port), 2000);
+                // Соединение установлено — скрываем индикатор загрузки,
+                // далее идёт уже рабочий режим чтения данных
+                hideProgress();
                 InputStream in = new BufferedInputStream(socket.getInputStream());
                 byte[] buf = new byte[512];
                 while (running.get()) {
@@ -56,7 +62,9 @@ class TcpManager {
             } catch (IOException e) {
                 onError.accept(e.getMessage());
             } finally {
-                onStop.run();
+                // На случай, если произошла ошибка ещё до установки соединения,
+                // убедимся, что индикатор скрыт
+                hideProgress();
                 closeQuietly();
                 running.set(false);
             }
@@ -67,7 +75,7 @@ class TcpManager {
         running.set(false);
         if (task != null) task.cancel(true);
         closeQuietly();
-        onStop.run();
+        hideProgress();
     }
 
     private void closeQuietly() {
@@ -75,5 +83,21 @@ class TcpManager {
             try { socket.close(); } catch (IOException ignored) {}
             socket = null;
         }
+    }
+
+    private void showProgress() {
+        synchronized (uiLock) {
+            if (progressShown) return;
+            progressShown = true;
+        }
+        try { onStart.run(); } catch (Throwable ignored) {}
+    }
+
+    private void hideProgress() {
+        synchronized (uiLock) {
+            if (!progressShown) return;
+            progressShown = false;
+        }
+        try { onStop.run(); } catch (Throwable ignored) {}
     }
 }

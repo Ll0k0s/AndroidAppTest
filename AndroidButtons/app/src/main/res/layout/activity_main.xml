@@ -13,7 +13,7 @@
         <LinearLayout
             android:id="@+id/linearLayout2"
             android:layout_width="wrap_content"
-            android:layout_height="95sp"
+            android:layout_height="wrap_content"
             android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -80,6 +80,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:gravity="top"
                 android:orientation="vertical">
 
                 <Switch
@@ -91,9 +92,11 @@
 
                 <ProgressBar
                     android:id="@+id/progressBarTCP"
-                    style="?android:attr/progressBarStyle"
-                    android:layout_width="48sp"
-                    android:layout_height="48sp" />
+                    style="@android:style/Widget.ProgressBar.Inverse"
+                    android:layout_width="24sp"
+                    android:layout_height="24sp"
+                    android:translationX="@android:dimen/config_shapeCornerRadiusSmall"
+                    android:translationY="?android:attr/buttonCornerRadius" />
             </LinearLayout>
 
         </LinearLayout>
@@ -138,6 +141,7 @@
             android:layout_width="240sp"
             android:layout_height="450sp"
             android:text="..."
+            android:textAlignment="center"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/linearLayout3"
@@ -146,7 +150,7 @@
         <LinearLayout
             android:id="@+id/linearLayout"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="72sp"
             android:gravity="center"
             android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
@@ -178,17 +182,18 @@
                     android:id="@+id/switch_UART"
                     android:layout_width="48sp"
                     android:layout_height="48sp"
-                    android:showText="false"
-                    android:splitTrack="true"
                     android:thumbTint="@color/switch_thumb"
-                    tools:checked="true"
                     tools:ignore="UseSwitchCompatOrMaterialXml" />
 
                 <ProgressBar
                     android:id="@+id/progressBarUART"
-                    style="?android:attr/progressBarStyle"
-                    android:layout_width="48sp"
-                    android:layout_height="48sp" />
+                    style="@android:style/Widget.ProgressBar.Inverse"
+                    android:layout_width="24sp"
+                    android:layout_height="24sp"
+                    android:indeterminate="false"
+                    android:translationX="@android:dimen/config_shapeCornerRadiusSmall"
+                    android:translationY="?android:attr/buttonCornerRadius"
+                    android:visibility="visible" />
             </LinearLayout>
 
         </LinearLayout>
@@ -206,6 +211,7 @@
                 android:id="@+id/switch_L1"
                 android:layout_width="100sp"
                 android:layout_height="60sp"
+                android:rotation="0"
                 android:scaleX="2"
                 android:scaleY="2"
                 android:text="L1"
