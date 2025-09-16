@@ -353,6 +353,69 @@
 			"problemMatcher": [
 				"$gradle"
 			]
+		},
+		{
+			"label": "Gradle assembleDebug (framed send)",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug",
+				"-x",
+				"lint"
+			],
+			"problemMatcher": [
+				"$gradle"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug (rx->switch->uart)",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug",
+				"-x",
+				"lint"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug (tcp writer)",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug",
+				"-x",
+				"lint"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug (tcp writer+hex)",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug",
+				"-x",
+				"lint"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug (final)",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug",
+				"-x",
+				"lint"
+			]
+		},
+		{
+			"label": "Gradle assembleDebug (format logs)",
+			"type": "shell",
+			"command": "d:\\AndroidApp\\AndroidButtons\\gradlew.bat",
+			"args": [
+				"assembleDebug",
+				"-x",
+				"lint"
+			]
 		}
 	]
 }

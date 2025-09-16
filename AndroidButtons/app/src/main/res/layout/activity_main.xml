@@ -136,13 +136,13 @@
 
         <TextView
             android:id="@+id/text_console"
-            android:layout_width="240sp"
-            android:layout_height="450sp"
+            android:layout_width="225dp"
+            android:layout_height="470sp"
             android:text="..."
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/linearLayout3"
-            app:layout_constraintTop_toBottomOf="@+id/linearLayout2" />
+            app:layout_constraintTop_toBottomOf="@+id/spinner_num" />
 
         <LinearLayout
             android:id="@+id/linearLayout"
@@ -198,20 +198,21 @@
 
         <LinearLayout
             android:id="@+id/linearLayout3"
-            android:layout_width="140dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/text_console"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/linearLayout2">
 
             <Switch
                 android:id="@+id/switch_L1"
-                android:layout_width="100sp"
-                android:layout_height="85sp"
+                android:layout_width="70sp"
+                android:layout_height="70sp"
                 android:rotation="0"
-                android:scaleX="2"
-                android:scaleY="2"
+                android:scaleX="1"
+                android:scaleY="1"
                 android:text="L1"
                 android:textAlignment="viewEnd"
                 android:textSize="14sp"
@@ -221,10 +222,10 @@
 
             <Switch
                 android:id="@+id/switch_L2"
-                android:layout_width="100sp"
-                android:layout_height="85sp"
-                android:scaleX="2"
-                android:scaleY="2"
+                android:layout_width="70sp"
+                android:layout_height="70sp"
+                android:scaleX="1"
+                android:scaleY="1"
                 android:text="L2"
                 android:textAlignment="viewEnd"
                 android:textStyle="bold"
@@ -233,10 +234,10 @@
 
             <Switch
                 android:id="@+id/switch_L3"
-                android:layout_width="100sp"
-                android:layout_height="85sp"
-                android:scaleX="2"
-                android:scaleY="2"
+                android:layout_width="70sp"
+                android:layout_height="70sp"
+                android:scaleX="1"
+                android:scaleY="1"
                 android:text="L3"
                 android:textAlignment="viewEnd"
                 android:textStyle="bold"
@@ -245,10 +246,10 @@
 
             <Switch
                 android:id="@+id/switch_L4"
-                android:layout_width="100sp"
-                android:layout_height="85sp"
-                android:scaleX="2"
-                android:scaleY="2"
+                android:layout_width="70sp"
+                android:layout_height="70sp"
+                android:scaleX="1"
+                android:scaleY="1"
                 android:text="L4"
                 android:textAlignment="viewEnd"
                 android:textStyle="bold"
@@ -257,10 +258,10 @@
 
             <Switch
                 android:id="@+id/switch_L5"
-                android:layout_width="100sp"
-                android:layout_height="85sp"
-                android:scaleX="2"
-                android:scaleY="2"
+                android:layout_width="70sp"
+                android:layout_height="70sp"
+                android:scaleX="1"
+                android:scaleY="1"
                 android:text="L5"
                 android:textAlignment="viewEnd"
                 android:textStyle="bold"
@@ -269,16 +270,25 @@
 
             <Switch
                 android:id="@+id/switch_L6"
-                android:layout_width="100sp"
-                android:layout_height="85sp"
-                android:scaleX="2"
-                android:scaleY="2"
+                android:layout_width="70sp"
+                android:layout_height="70sp"
+                android:scaleX="1"
+                android:scaleY="1"
                 android:text="L6"
                 android:textAlignment="viewEnd"
                 android:textStyle="bold"
                 android:thumbTint="@color/switch_thumb"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
+
         </LinearLayout>
+
+        <Spinner
+            android:id="@+id/spinner_num"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/linearLayout3"
+            app:layout_constraintTop_toBottomOf="@+id/linearLayout2" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

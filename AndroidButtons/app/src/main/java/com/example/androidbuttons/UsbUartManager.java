@@ -25,6 +25,8 @@ class UsbUartManager {
     private final StringConsumer onData;
     private final StringConsumer onError;
     private final StringConsumer onStatus;
+    // Новый колбэк: уведомление о переданных фреймах (HEX)
+    private final StringConsumer onTxHex;
 
     private UsbSerialPort serialPort;
     private SerialInputOutputManager ioManager;
@@ -48,7 +50,8 @@ class UsbUartManager {
                    Runnable onStop,
                    StringConsumer onData,
                    StringConsumer onError,
-                   StringConsumer onStatus) {
+                   StringConsumer onStatus,
+                   StringConsumer onTxHex) {
         this.context = context.getApplicationContext();
         this.usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
         this.permissionIntent = permissionIntent;
@@ -57,6 +60,7 @@ class UsbUartManager {
         this.onData = onData;
         this.onError = onError;
         this.onStatus = onStatus;
+        this.onTxHex = onTxHex;
     }
 
     private String ts() {
@@ -287,5 +291,75 @@ class UsbUartManager {
             } catch (IOException ignored) {
             }
         });
+    }
+
+    // ---------- Бинарный протокол отправки ----------
+    // Формат кадра: 0x7E | cmd(1) | len(2 big-endian) | data(N) | crc8(cmd+len+data)
+    void sendFramed(int cmd, byte[] data) {
+        final byte START = 0x7E;
+        byte[] payload = data != null ? data : new byte[0];
+        int len = payload.length & 0xFFFF;
+        byte lenHi = (byte) ((len >> 8) & 0xFF);
+        byte lenLo = (byte) (len & 0xFF);
+        // CRC считается по последовательности: cmd, lenHi, lenLo, data...
+        byte[] crcBuf = new byte[3 + payload.length];
+        crcBuf[0] = (byte) (cmd & 0xFF);
+        crcBuf[1] = lenHi;
+        crcBuf[2] = lenLo;
+        if (payload.length > 0) System.arraycopy(payload, 0, crcBuf, 3, payload.length);
+        byte crc = crc8(crcBuf, 0, crcBuf.length);
+
+        // Формируем итоговый буфер
+        byte[] frame = new byte[1 + crcBuf.length + 1];
+        frame[0] = START;
+        System.arraycopy(crcBuf, 0, frame, 1, crcBuf.length);
+        frame[frame.length - 1] = crc;
+
+        // Сообщаем в UI хекс-дамп отправляемого кадра (без шума от служебных CRLF)
+        if (onTxHex != null) {
+            try { onTxHex.accept(toHex(frame)); } catch (Exception ignored) {}
+        }
+
+        // Пишем в порт
+        sendBytes(frame);
+    }
+
+    void sendFramed(int cmd, int... args) {
+        if (args == null || args.length == 0) { sendFramed(cmd, new byte[0]); return; }
+        byte[] bytes = new byte[args.length];
+        for (int i = 0; i < args.length; i++) bytes[i] = (byte) (args[i] & 0xFF);
+        sendFramed(cmd, bytes);
+    }
+
+    private void sendBytes(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) return;
+        scheduler.execute(() -> {
+            if (serialPort == null) return;
+            try {
+                serialPort.write(bytes, 300);
+            } catch (IOException ignored) {
+            }
+        });
+    }
+
+    private static byte crc8(byte[] buf, int off, int len) {
+        int crc = 0x00;
+        for (int i = off; i < off + len; i++) {
+            crc ^= (buf[i] & 0xFF);
+            for (int b = 0; b < 8; b++) {
+                if ((crc & 0x80) != 0) crc = ((crc << 1) ^ 0x31) & 0xFF; else crc = (crc << 1) & 0xFF;
+            }
+        }
+        return (byte) (crc & 0xFF);
+    }
+
+    private static String toHex(byte[] data) {
+        if (data == null) return "";
+        StringBuilder sb = new StringBuilder(data.length * 3);
+        for (int i = 0; i < data.length; i++) {
+            sb.append(String.format(java.util.Locale.US, "%02X", data[i] & 0xFF));
+            if (i + 1 < data.length) sb.append(' ');
+        }
+        return sb.toString();
     }
 }

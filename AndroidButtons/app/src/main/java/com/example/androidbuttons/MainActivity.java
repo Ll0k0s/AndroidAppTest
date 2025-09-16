@@ -11,6 +11,10 @@ import android.os.Bundle;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Toast;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Locale;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -23,6 +27,12 @@ public class MainActivity extends AppCompatActivity {
     private TcpManager tcpManager;
     private UsbUartManager usbUartManager;
     private DataBuffer uiBuffer;
+    // Аккумулятор для последней незавершённой строки консоли
+    private final StringBuilder consoleRemainder = new StringBuilder();
+    // Текущий выбранный локомотив (1..8) для фильтра TCP
+    private final AtomicInteger selectedLoco = new AtomicInteger(1);
+    // Подавление отправок при программном изменении свитчей (по TCP)
+    private volatile boolean suppressSwitchCallback = false;
 
     // TCP авто‑поиск: резюмируем только после того, как пользователь сам спрятал клавиатуру
     private android.os.Handler tcpDebounceHandler; // оставлен для совместимости, но не используется для автоспрятия
@@ -82,10 +92,100 @@ public class MainActivity extends AppCompatActivity {
 
     uiBuffer = new DataBuffer(256, data -> runOnUiThread(() -> appendToConsole(data)));
 
+    // Наполняем spinner_num значениями Loco1..Loco8
+    String[] locoItems = new String[8];
+    for (int i = 0; i < 8; i++) locoItems[i] = "Loco" + (i + 1);
+        ArrayAdapter<String> locoAdapter = new ArrayAdapter<>(
+        this,
+        android.R.layout.simple_spinner_item,
+        locoItems
+    );
+    locoAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+    binding.spinnerNum.setAdapter(locoAdapter);
+        binding.spinnerNum.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                selectedLoco.set(position + 1);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) { /* keep previous */ }
+        });
+
     tcpManager = new TcpManager(
                 () -> runOnUiThread(() -> binding.progressBarTCP.setVisibility(View.VISIBLE)),
                 () -> runOnUiThread(() -> binding.progressBarTCP.setVisibility(View.GONE)),
-        data -> uiBuffer.offer("[TCP→] " + data),
+        data -> {
+            if (data == null || data.isEmpty()) return;
+            // Фильтруем только строки с совпадающим локомотивом
+            String[] lines = data.split("\n");
+            int locoTarget = selectedLoco.get();
+            for (String line : lines) {
+                if (line == null) continue;
+                String ln = line.trim();
+                if (ln.isEmpty()) continue;
+                int idx = ln.indexOf("loco=");
+                if (idx < 0) continue; // пропускаем строки без указания локомотива
+                int j = idx + 5; // после 'loco='
+                int val = 0; boolean has = false;
+                while (j < ln.length()) {
+                    char c = ln.charAt(j);
+                    if (c >= '0' && c <= '9') { val = val * 10 + (c - '0'); has = true; j++; }
+                    else break;
+                }
+                if (has && val == locoTarget) {
+                    // Попробуем распарсить cmd и switch, чтобы обновить свитч и отправить UART
+                    int cmdVal = -1;
+                    int swNo = -1;
+                    // cmd=0x..
+                    int idxCmd = ln.indexOf("cmd=0x");
+                    if (idxCmd >= 0 && idxCmd + 6 < ln.length()) {
+                        int k = idxCmd + 6; // после 'cmd=0x'
+                        int v = 0; boolean got = false;
+                        while (k < ln.length()) {
+                            char ch = ln.charAt(k);
+                            int d;
+                            if (ch >= '0' && ch <= '9') d = ch - '0';
+                            else if (ch >= 'a' && ch <= 'f') d = 10 + (ch - 'a');
+                            else if (ch >= 'A' && ch <= 'F') d = 10 + (ch - 'A');
+                            else break;
+                            v = (v << 4) | d; got = true; k++;
+                        }
+                        if (got) cmdVal = v & 0xFF;
+                    }
+                    // switch=
+                    int idxSw = ln.indexOf("switch=");
+                    if (idxSw >= 0 && idxSw + 7 < ln.length()) {
+                        int k = idxSw + 7; // после 'switch='
+                        int v = 0; boolean got = false;
+                        while (k < ln.length()) {
+                            char ch = ln.charAt(k);
+                            if (ch >= '0' && ch <= '9') { v = v * 10 + (ch - '0'); got = true; k++; }
+                            else break;
+                        }
+                        if (got) swNo = v;
+                    }
+
+                    if (cmdVal >= 0 && swNo >= 1 && swNo <= 6) {
+                        // Локальный лог в требуемом формате
+                        String state = (cmdVal == 0x01) ? "on" : (cmdVal == 0x00 ? "off" : ("0x" + Integer.toHexString(cmdVal)));
+                        uiBuffer.offer("[#TCP_RX#]" + "Rx: loco" + val + " - " + swNo + " " + state + "\n");
+
+                        final int relayNo = swNo;
+                        final boolean turnOn;
+                        if (cmdVal == 0x00) turnOn = false; else if (cmdVal == 0x01) turnOn = true; else continue; // поддерживаем только 0x00/0x01
+
+                        runOnUiThread(() -> {
+                            // Обновляем соответствующий свитч без вызова отправки по Wi‑Fi
+                            android.widget.Switch swView = getSwitchByRelayNo(relayNo);
+                            if (swView != null) {
+                                suppressSwitchCallback = true;
+                                try { swView.setChecked(turnOn); } finally { suppressSwitchCallback = false; }
+                            }
+                            // Отправляем команду по UART согласно полученному кадру
+                            usbUartManager.sendFramed(turnOn ? 0x01 : 0x00, relayNo);
+                        });
+                    }
+                }
+            }
+        },
     error -> { /* no toast */ },
     status -> runOnUiThread(() -> {
         boolean connected = "connected".equals(status);
@@ -106,7 +206,45 @@ public class MainActivity extends AppCompatActivity {
                 permissionIntent,
         () -> runOnUiThread(() -> binding.progressBarUART.setVisibility(View.VISIBLE)),
         () -> runOnUiThread(() -> binding.progressBarUART.setVisibility(View.GONE)),
-    data -> uiBuffer.offer(data),
+    data -> {
+        if (data == null || data.isEmpty()) return;
+        String s = data.trim();
+        if (s.isEmpty()) return;
+        // Пытаемся распарсить как cmd/loco/switch для единого формата
+        String ln = s;
+        int loco = -1, sw = -1, cmdVal = -1;
+        int idxL = ln.indexOf("loco=");
+        if (idxL >= 0) {
+            int j = idxL + 5; int v = 0; boolean has = false;
+            while (j < ln.length()) { char c = ln.charAt(j); if (c >= '0' && c <= '9') { v = v*10 + (c-'0'); has = true; j++; } else break; }
+            if (has) loco = v;
+        }
+        int idxS = ln.indexOf("switch=");
+        if (idxS >= 0) {
+            int j = idxS + 7; int v = 0; boolean has = false;
+            while (j < ln.length()) { char c = ln.charAt(j); if (c >= '0' && c <= '9') { v = v*10 + (c-'0'); has = true; j++; } else break; }
+            if (has) sw = v;
+        }
+        int idxC = ln.indexOf("cmd=0x");
+        if (idxC >= 0 && idxC + 6 < ln.length()) {
+            int j = idxC + 6; int v = 0; boolean has = false;
+            while (j < ln.length()) {
+                char ch = ln.charAt(j);
+                int d; if (ch >= '0' && ch <= '9') d = ch - '0';
+                else if (ch >= 'a' && ch <= 'f') d = 10 + (ch - 'a');
+                else if (ch >= 'A' && ch <= 'F') d = 10 + (ch - 'A');
+                else break; v = (v << 4) | d; has = true; j++;
+            }
+            if (has) cmdVal = v & 0xFF;
+        }
+        if (loco > 0 && sw > 0 && (cmdVal == 0x00 || cmdVal == 0x01)) {
+            String state = cmdVal == 0x01 ? "on" : "off";
+            uiBuffer.offer("[UART←]" + "Rx: loco" + loco + " - " + sw + " " + state + "\n");
+        } else {
+            // fallback — сырой текст
+            uiBuffer.offer("[UART←]" + "Rx: " + s + "\n");
+        }
+    },
     error -> { /* без тостов и логов об ошибках UART */ },
     status -> {
         // Показываем только тосты включения/отключения, статус в консоль не выводим
@@ -115,7 +253,8 @@ public class MainActivity extends AppCompatActivity {
         } else if (status.contains("disconnect")) {
             runOnUiThread(() -> binding.switchUART.setChecked(false));
         }
-    }
+    },
+    hex -> { /* подавляем сырой HEX, чтобы не ломать единый формат консоли */ }
         );
 
         // Register USB broadcast receiver for the whole Activity lifetime to not miss permission result
@@ -257,11 +396,54 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void appendToConsole(@NonNull String text) {
-        binding.textConsole.append(text);
+        // Копим в аккумулятор и обрабатываем построчно — это предотвращает неверную подсветку,
+        // когда пачка содержит части строк с разными префиксами
+        consoleRemainder.append(text);
+        int idx;
+        while ((idx = indexOfNewline(consoleRemainder)) >= 0) {
+            String line = consoleRemainder.substring(0, idx + 1);
+            consoleRemainder.delete(0, idx + 1);
+
+            int color = -1;
+            boolean removePrefix = false;
+            int removeLen = 0;
+            if (line.startsWith("[UART→]")) {
+                color = 0xFF90EE90; // LightGreen: TX
+                removePrefix = true; removeLen = "[UART→]".length();
+            } else if (line.startsWith("[UART←]")) {
+                color = 0xFF006400; // DarkGreen: RX
+                removePrefix = true; removeLen = "[UART←]".length();
+            } else if (line.startsWith("[#TCP_TX#]")) {
+                color = 0xFF87CEFA; // LightSkyBlue: TCP TX
+                removePrefix = true; removeLen = "[#TCP_TX#]".length();
+            } else if (line.startsWith("[#TCP_RX#]")) {
+                color = 0xFF0000FF; // Blue: TCP RX
+                removePrefix = true; removeLen = "[#TCP_RX#]".length();
+            }
+
+            if (removePrefix && removeLen > 0) {
+                line = line.substring(removeLen);
+            }
+            if (color != -1) {
+                android.text.SpannableString ss = new android.text.SpannableString(line);
+                ss.setSpan(new android.text.style.ForegroundColorSpan(color), 0, ss.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                binding.textConsole.append(ss);
+            } else {
+                binding.textConsole.append(line);
+            }
+        }
         int scrollAmount = binding.textConsole.getLayout() != null
                 ? binding.textConsole.getLayout().getLineTop(binding.textConsole.getLineCount()) - binding.textConsole.getHeight()
                 : 0;
         if (scrollAmount > 0) binding.textConsole.scrollTo(0, scrollAmount);
+    }
+
+    private static int indexOfNewline(StringBuilder sb) {
+        for (int i = 0; i < sb.length(); i++) {
+            char c = sb.charAt(i);
+            if (c == '\n') return i;
+        }
+        return -1;
     }
 
     private void toast(String msg) { /* no-op, toasts disabled */ }
@@ -298,11 +480,49 @@ public class MainActivity extends AppCompatActivity {
         if (v3 != null) v3.clearFocus();
     }
 
+    private android.widget.Switch getSwitchByRelayNo(int relayNo) {
+        switch (relayNo) {
+            case 1: return binding.switchL1;
+            case 2: return binding.switchL2;
+            case 3: return binding.switchL3;
+            case 4: return binding.switchL4;
+            case 5: return binding.switchL5;
+            case 6: return binding.switchL6;
+            default: return null;
+        }
+    }
+
     private void wireRelaySwitch(android.widget.Switch switchView, String name) {
         if (switchView == null) return;
+        // Новая семантика: cmd = 0x01 (включить) или 0x00 (выключить),
+        // data = номер реле (1..6)
+        final int relayNo;
+        switch (name) {
+            case "L1": relayNo = 1; break;
+            case "L2": relayNo = 2; break;
+            case "L3": relayNo = 3; break;
+            case "L4": relayNo = 4; break;
+            case "L5": relayNo = 5; break;
+            case "L6": relayNo = 6; break;
+            default: return;
+        }
         switchView.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            String cmd = "<" + name + (isChecked ? "+" : "-") + ">\r\n";
-            usbUartManager.send(cmd);
+            if (suppressSwitchCallback) return; // программное изменение из TCP — ничего не отправляем здесь
+            int cmd = isChecked ? 0x01 : 0x00;
+            usbUartManager.sendFramed(cmd, relayNo);
+            // Также отправляем по Wi‑Fi (TCP) тот же смысл: cmd=0x00/0x01, data=[loco(1..8), switch(1..6)]
+            int loco = selectedLoco.get();
+            tcpManager.sendControl(cmd, loco, relayNo);
+            // Локальный лог TX только при активном соединении
+            if (tcpManager.connectionActive()) {
+                String state = cmd == 0x01 ? "on" : "off";
+                uiBuffer.offer("[#TCP_TX#]" + "Tx: loco" + loco + " - " + relayNo + " " + state + "\n");
+            }
+            // И сразу же логируем UART TX в едином формате и зелёным цветом
+            {
+                String state = cmd == 0x01 ? "on" : "off";
+                uiBuffer.offer("[UART→]" + "Tx: loco" + loco + " - " + relayNo + " " + state + "\n");
+            }
         });
     }
 }
