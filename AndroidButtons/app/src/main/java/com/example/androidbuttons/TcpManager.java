@@ -5,9 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 class TcpManager {
@@ -23,35 +21,58 @@ class TcpManager {
     private final Runnable onStop;
     private final StringConsumer onData;
     private final StringConsumer onError;
+    private final StringConsumer onStatus;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private Future<?> task;
     private Socket socket;
     private final AtomicBoolean running = new AtomicBoolean(false);
-    // Управление показом индикатора: защищаем от повторных вызовов
-    private final Object uiLock = new Object();
-    private boolean progressShown = false;
+
+    // Auto reconnect logic
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> autoTask;
+    private volatile boolean autoMode = false;
+    private volatile boolean autoPaused = false;
+    private volatile String targetHost = null;
+    private volatile int targetPort = -1;
+    private volatile boolean connecting = false;
+    private volatile boolean searching = false;
+
+    private void setSearching(boolean s) {
+        if (searching == s) return;
+        searching = s;
+        if (s) onStart.run(); else onStop.run();
+    }
 
     TcpManager(Runnable onStart, Runnable onStop,
                StringConsumer onData,
-               StringConsumer onError) {
+               StringConsumer onError,
+               StringConsumer onStatus) {
         this.onStart = onStart;
         this.onStop = onStop;
         this.onData = onData;
         this.onError = onError;
+        this.onStatus = onStatus;
     }
 
     synchronized void connect(String host, int port) {
+        // Валидация цели
+        if (host == null || host.trim().isEmpty() || port < 1 || port > 65535) return;
+        // Не стартуем параллельные попытки и не рвём активное соединение
+        if (connecting || isConnected()) return;
+
+        // Очистим предыдущие хвосты, если были
         disconnect();
+        connecting = true;
         running.set(true);
-        showProgress();
+        setSearching(true);
         task = executor.submit(() -> {
             try {
                 socket = new Socket();
                 socket.connect(new InetSocketAddress(host, port), 2000);
-                // Соединение установлено — скрываем индикатор загрузки,
-                // далее идёт уже рабочий режим чтения данных
-                hideProgress();
+                // Соединение установлено — поиск завершён
+                setSearching(false);
+                if (onStatus != null) onStatus.accept("connected");
                 InputStream in = new BufferedInputStream(socket.getInputStream());
                 byte[] buf = new byte[512];
                 while (running.get()) {
@@ -62,11 +83,10 @@ class TcpManager {
             } catch (IOException e) {
                 onError.accept(e.getMessage());
             } finally {
-                // На случай, если произошла ошибка ещё до установки соединения,
-                // убедимся, что индикатор скрыт
-                hideProgress();
                 closeQuietly();
                 running.set(false);
+                connecting = false;
+                if (onStatus != null) onStatus.accept("disconnected");
             }
         });
     }
@@ -75,7 +95,8 @@ class TcpManager {
         running.set(false);
         if (task != null) task.cancel(true);
         closeQuietly();
-        hideProgress();
+        connecting = false;
+        if (onStatus != null) onStatus.accept("disconnected");
     }
 
     private void closeQuietly() {
@@ -85,19 +106,43 @@ class TcpManager {
         }
     }
 
-    private void showProgress() {
-        synchronized (uiLock) {
-            if (progressShown) return;
-            progressShown = true;
-        }
-        try { onStart.run(); } catch (Throwable ignored) {}
+    synchronized boolean isConnected() {
+        return socket != null && socket.isConnected() && !socket.isClosed();
     }
 
-    private void hideProgress() {
-        synchronized (uiLock) {
-            if (!progressShown) return;
-            progressShown = false;
-        }
-        try { onStop.run(); } catch (Throwable ignored) {}
+    // ---- Auto connect API ----
+    void enableAutoConnect(String host, int port) {
+        targetHost = host;
+        targetPort = port;
+        autoMode = true;
+        if (autoTask != null) { autoTask.cancel(false); autoTask = null; }
+        autoTask = scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                if (!autoMode || autoPaused) { setSearching(false); return; }
+                String h = targetHost; int p = targetPort;
+                if (h == null || h.trim().isEmpty() || p < 1 || p > 65535) return;
+                if (isConnected()) { setSearching(false); return; }
+                if (!connecting) {
+                    setSearching(true);
+                    connect(h, p);
+                }
+            } catch (Throwable t) { /* suppress */ }
+        }, 0, 1, TimeUnit.SECONDS);
+    }
+
+    void disableAutoConnect() {
+        autoMode = false;
+        if (autoTask != null) { autoTask.cancel(false); autoTask = null; }
+        setSearching(false);
+    }
+
+    void pauseAuto(boolean paused) {
+        this.autoPaused = paused;
+        if (paused) setSearching(false);
+    }
+
+    void updateTarget(String host, int port) {
+        this.targetHost = host;
+        this.targetPort = port;
     }
 }

@@ -79,15 +79,14 @@ class UsbUartManager {
             UsbDevice found = scanForDevice(1000);
             if (!pendingConnect) return;
             if (found == null) {
-                onStop.run();
                 onError.accept("No USB devices found or compatible driver");
                 pendingConnect = false;
                 return;
             }
+            // Устройство найдено — теперь показываем индикатор
+            onStart.run();
             selectedDevice = found;
             log("UART: DISCOVERED device=" + found.getDeviceName() + " vid=" + found.getVendorId() + " pid=" + found.getProductId());
-            // Показываем прогресс только после обнаружения устройства
-            onStart.run();
             boolean hasPerm = usbManager.hasPermission(selectedDevice);
             log("UART: selected device=" + selectedDevice.getDeviceName() + ", hasPermission=" + hasPerm);
             if (hasPerm) {
@@ -110,10 +109,31 @@ class UsbUartManager {
 
     boolean isConnected() { return serialPort != null && ioManager != null; }
 
-    void setAutoBaud(int baud) { this.autoBaud = baud; }
-
-    // Упрощённый вызов: подключиться, используя текущий autoBaud
-    void connectAuto() { connect(autoBaud); }
+    void setAutoBaud(int baud) {
+        // Обновляем значения для авто‑режима и для текущего/следующего подключения
+        this.autoBaud = baud;
+        this.pendingBaud = baud;
+        // Если порт уже открыт — применяем скорость немедленно, не разрывая соединение
+        scheduler.execute(() -> {
+            if (serialPort != null) {
+                try {
+                    serialPort.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+                    log("UART: baud updated to " + baud);
+                    try { serialPort.purgeHwBuffers(true, true); } catch (Exception ignored) {}
+                    // Лёгкий "kick" после смены скорости — поможет увидеть, что новая скорость активна
+                    scheduler.schedule(() -> {
+                        if (serialPort != null) {
+                            try { serialPort.write("\r\n".getBytes(), 100); } catch (IOException ignored) {}
+                        }
+                    }, 150, TimeUnit.MILLISECONDS);
+                } catch (Exception e) {
+                    onError.accept("UART: set baud failed: " + e.getMessage());
+                }
+            } else {
+                log("UART: baud set for next connect: " + baud);
+            }
+        });
+    }
 
     private UsbDevice scanForDevice(long timeoutMs) {
         long start = System.currentTimeMillis();
@@ -180,9 +200,10 @@ class UsbUartManager {
     }
 
     private void startIo() {
-        // Может быть вызвано с задержкой — проверим, что ещё актуально
-        if (serialPort == null || !pendingConnect) {
-            log("UART: startIo skipped (serialPort=null or not pending)");
+        if (!pendingConnect || serialPort == null) {
+            // Соединение отменено или порт уже закрыт — ничего не делаем
+            pendingConnect = false;
+            onStop.run();
             return;
         }
         final long startIoAt = System.currentTimeMillis();
@@ -206,9 +227,8 @@ class UsbUartManager {
         });
         ioExecutor.submit(ioManager);
         log("UART: start IO");
-    // Подключение завершено — сбросим pendingConnect
-    pendingConnect = false;
-        onStop.run();
+    // Теперь индикатор можно скрыть, подключение завершено
+    onStop.run();
 
         scheduler.schedule(() -> {
             if (serialPort != null && !kickDone && lastDataAt == 0L) {
@@ -254,5 +274,18 @@ class UsbUartManager {
         autoMode = false;
         if (autoTask != null) { autoTask.cancel(false); autoTask = null; }
         log("UART: auto-connect DISABLED");
+    }
+
+    // Публичный метод для отправки данных в UART
+    void send(String data) {
+        if (data == null || data.isEmpty()) return;
+        // Используем отдельный поток планировщика, чтобы не блокироваться на IO-исполнителе
+        scheduler.execute(() -> {
+            if (serialPort == null) return;
+            try {
+                serialPort.write(data.getBytes(), 200);
+            } catch (IOException ignored) {
+            }
+        });
     }
 }
