@@ -8,8 +8,9 @@ android {
 
     defaultConfig {
         applicationId = "com.example.androidbuttons"
-        minSdk = 31
-        targetSdk = 36
+        // Требования: поддержка с API 21, целевая API 31
+        minSdk = 21
+        targetSdk = 31
         versionCode = 1
         versionName = "1.0"
 
@@ -41,7 +42,7 @@ dependencies {
     implementation(libs.constraintlayout)
     implementation(libs.navigation.fragment)
     implementation(libs.navigation.ui)
-    implementation("com.github.mik3y:usb-serial-for-android:3.3.0")
+    implementation("com.github.mik3y:usb-serial-for-android:3.4.6")
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

@@ -24,6 +24,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Опционально оставляем TcpOnlyActivity без intent-filter -->
+        <activity
+            android:name=".TcpOnlyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AndroidButtons" />
     </application>
 
 </manifest>
