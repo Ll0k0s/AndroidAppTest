@@ -8,13 +8,19 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Toast;
 import android.widget.ArrayAdapter;
 import android.widget.AdapterView;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.TransitionDrawable;
+import androidx.appcompat.content.res.AppCompatResources;
+import android.widget.ImageView;
+import android.view.MotionEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Locale;
+// import android.provider.Settings; // overlay removed
+// import android.net.Uri; // overlay removed
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -27,10 +33,7 @@ public class MainActivity extends AppCompatActivity {
     private TcpManager tcpManager;
     private UsbUartManager usbUartManager;
     private DataBuffer uiBuffer;
-    // Аккумулятор для последней незавершённой строки консоли
-    private final StringBuilder consoleRemainder = new StringBuilder();
-    // Текущий выбранный локомотив (1..8) для фильтра TCP
-    private final AtomicInteger selectedLoco = new AtomicInteger(1);
+    // Выбранный локомотив берём из общего состояния, чтобы синхронизироваться с экраном настроек
     // Подавление отправок при программном изменении свитчей (по TCP)
     private volatile boolean suppressSwitchCallback = false;
 
@@ -63,8 +66,9 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 }
-                int baud;
-                try { baud = Integer.parseInt(String.valueOf(binding.valueBaudRate.getText())); } catch (Exception e) { baud = 9600; }
+                // Берём скорость из SharedPreferences
+                android.content.SharedPreferences prefs = getSharedPreferences(AppState.PREFS_NAME, MODE_PRIVATE);
+                int baud = prefs.getInt(AppState.KEY_UART_BAUD, 115200);
                 // Инициируем подключение сразу (менеджер сам отфильтрует, если уже подключается/подключен)
                 usbUartManager.connect(baud);
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(intent.getAction())) {
@@ -85,38 +89,29 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        // UI
-        binding.textConsole.setMovementMethod(new ScrollingMovementMethod());
-        binding.progressBarTCP.setVisibility(View.GONE);
-        binding.progressBarUART.setVisibility(View.GONE);
+    // UI (на главном экране остались только L1–L6 и кнопка настроек)
 
-    uiBuffer = new DataBuffer(256, data -> runOnUiThread(() -> appendToConsole(data)));
-
-    // Наполняем spinner_num значениями Loco1..Loco8
-    String[] locoItems = new String[8];
-    for (int i = 0; i < 8; i++) locoItems[i] = "Loco" + (i + 1);
-        ArrayAdapter<String> locoAdapter = new ArrayAdapter<>(
-        this,
-        android.R.layout.simple_spinner_item,
-        locoItems
-    );
-    locoAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-    binding.spinnerNum.setAdapter(locoAdapter);
-        binding.spinnerNum.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedLoco.set(position + 1);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) { /* keep previous */ }
+        // Кнопка перехода в настройки
+        binding.btnOpenSettings.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
+            startActivity(intent);
         });
 
+        uiBuffer = new DataBuffer(256, data -> {
+            // Отдаём в общий буфер, чтобы настройки могли видеть консоль (на главном экране консоль не показываем)
+            AppState.consoleQueue.offer(data);
+        });
+
+    // На главном экране больше нет полей настроек — только L1–L6 и кнопка настроек
+
     tcpManager = new TcpManager(
-                () -> runOnUiThread(() -> binding.progressBarTCP.setVisibility(View.VISIBLE)),
-                () -> runOnUiThread(() -> binding.progressBarTCP.setVisibility(View.GONE)),
+                () -> runOnUiThread(() -> { AppState.tcpConnecting = true; }),
+                () -> runOnUiThread(() -> { AppState.tcpConnecting = false; }),
         data -> {
             if (data == null || data.isEmpty()) return;
             // Фильтруем только строки с совпадающим локомотивом
             String[] lines = data.split("\n");
-            int locoTarget = selectedLoco.get();
+            int locoTarget = AppState.selectedLoco.get();
             for (String line : lines) {
                 if (line == null) continue;
                 String ln = line.trim();
@@ -163,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
                         if (got) swNo = v;
                     }
 
-                    if (cmdVal >= 0 && swNo >= 1 && swNo <= 6) {
+                    if (cmdVal >= 0 && swNo >= 1 && swNo <= 5) {
                         // Локальный лог в требуемом формате
                         String state = (cmdVal == 0x01) ? "on" : (cmdVal == 0x00 ? "off" : ("0x" + Integer.toHexString(cmdVal)));
                         uiBuffer.offer("[#TCP_RX#]" + "Rx: loco" + val + " - " + swNo + " " + state + "\n");
@@ -173,13 +168,10 @@ public class MainActivity extends AppCompatActivity {
                         if (cmdVal == 0x00) turnOn = false; else if (cmdVal == 0x01) turnOn = true; else continue; // поддерживаем только 0x00/0x01
 
                         runOnUiThread(() -> {
-                            // Обновляем соответствующий свитч без вызова отправки по Wi‑Fi
-                            android.widget.Switch swView = getSwitchByRelayNo(relayNo);
-                            if (swView != null) {
-                                suppressSwitchCallback = true;
-                                try { swView.setChecked(turnOn); } finally { suppressSwitchCallback = false; }
+                            // Игнорируем визуальное обновление до первого пользовательского касания полосы
+                            if (turnOn && userInteracted && currentState != relayNo) {
+                                applyStripState(relayNo, true, false); // обновляем визуально (без отправки назад)
                             }
-                            // Отправляем команду по UART согласно полученному кадру
                             usbUartManager.sendFramed(turnOn ? 0x01 : 0x00, relayNo);
                         });
                     }
@@ -189,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
     error -> { /* no toast */ },
     status -> runOnUiThread(() -> {
         boolean connected = "connected".equals(status);
-        binding.switchTCP.setChecked(connected);
+        AppState.tcpConnected = connected;
     })
         );
 
@@ -204,8 +196,8 @@ public class MainActivity extends AppCompatActivity {
     usbUartManager = new UsbUartManager(
                 this,
                 permissionIntent,
-        () -> runOnUiThread(() -> binding.progressBarUART.setVisibility(View.VISIBLE)),
-        () -> runOnUiThread(() -> binding.progressBarUART.setVisibility(View.GONE)),
+    () -> runOnUiThread(() -> { AppState.uartConnecting = true; }),
+    () -> runOnUiThread(() -> { AppState.uartConnecting = false; }),
     data -> {
         if (data == null || data.isEmpty()) return;
         String s = data.trim();
@@ -247,11 +239,11 @@ public class MainActivity extends AppCompatActivity {
     },
     error -> { /* без тостов и логов об ошибках UART */ },
     status -> {
-        // Показываем только тосты включения/отключения, статус в консоль не выводим
+        // Статус UART: "start IO" => connected, "disconnect" => not connected
         if (status.contains("start IO")) {
-            runOnUiThread(() -> binding.switchUART.setChecked(true));
+            AppState.uartConnected = true;
         } else if (status.contains("disconnect")) {
-            runOnUiThread(() -> binding.switchUART.setChecked(false));
+            AppState.uartConnected = false;
         }
     },
     hex -> { /* подавляем сырой HEX, чтобы не ломать единый формат консоли */ }
@@ -269,108 +261,22 @@ public class MainActivity extends AppCompatActivity {
         }
         receiverRegistered = true;
 
-        // Слушатель видимости клавиатуры: при скрытии убираем каретку (снимаем фокус) со всех трёх полей
-        final android.view.View rootView = binding.getRoot();
-        keyboardListener = new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
-            private boolean wasVisible = false;
-            @Override public void onGlobalLayout() {
-                android.graphics.Rect r = new android.graphics.Rect();
-                rootView.getWindowVisibleDisplayFrame(r);
-                int screenHeight = rootView.getRootView().getHeight();
-                int heightDiff = screenHeight - r.height();
-                // Порог ~128dp
-                int threshold = (int) (128 * getResources().getDisplayMetrics().density);
-                boolean isVisible = heightDiff > threshold;
-                if (wasVisible && !isVisible) {
-                    // Клавиатура только что скрылась — убираем каретку/фокус со всех полей
-                    clearFocusAllInputs();
-                }
-                wasVisible = isVisible;
-            }
-        };
-        rootView.getViewTreeObserver().addOnGlobalLayoutListener(keyboardListener);
+        // На главном экране нет полей ввода — слушатель клавиатуры не нужен
 
-    // Switches
-    // TCP теперь тоже в авто-режиме
-    binding.switchTCP.setChecked(false);
-        binding.switchTCP.setEnabled(false);
-
-        // Стартуем авто‑подключение с текущими значениями
-        String initHost = String.valueOf(binding.valueAddrTCP.getText()).trim();
-        int initPort;
-        try { initPort = Integer.parseInt(String.valueOf(binding.valuePortTCP.getText()).trim()); }
-        catch (Exception e) { initPort = -1; }
+        // Стартуем авто‑подключение с настройками из SharedPreferences (если есть)
+        android.content.SharedPreferences prefs = getSharedPreferences(AppState.PREFS_NAME, MODE_PRIVATE);
+        String initHost = prefs.getString(AppState.KEY_TCP_HOST, "192.168.2.6");
+        int initPort = prefs.getInt(AppState.KEY_TCP_PORT, 9000);
         tcpManager.enableAutoConnect(initHost, initPort);
 
-    // При изменении адреса/порта — просто ставим на паузу и рвём соединение. Возобновление — только после скрытия клавиатуры
-    tcpDebounceHandler = new android.os.Handler(getMainLooper());
-        tcpManager.pauseAuto(false);
-
-        binding.valueAddrTCP.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                tcpManager.pauseAuto(true);
-                // Полностью блокируем текущие попытки/соединение на период редактирования
-                tcpManager.disconnect();
-            }
-            @Override public void afterTextChanged(android.text.Editable s) {}
-        });
-        binding.valuePortTCP.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                tcpManager.pauseAuto(true);
-                // Полностью блокируем текущие попытки/соединение на период редактирования
-                tcpManager.disconnect();
-            }
-            @Override public void afterTextChanged(android.text.Editable s) {}
-        });
-
-        // Резюмируем поиск после того, как пользователь сам спрятал клавиатуру (IME action Done)
-        android.widget.TextView.OnEditorActionListener doneListener = (v, actionId, event) -> {
-            hideKeyboardAndClearFocus();
-            resumeTcpAuto();
-            return false;
-        };
-        binding.valueAddrTCP.setOnEditorActionListener(doneListener);
-        binding.valuePortTCP.setOnEditorActionListener(doneListener);
-
-        // При потере фокуса (обычно когда клавиатура спрятана пользователем) — возобновляем поиск
-        android.view.View.OnFocusChangeListener blurListener = (v, hasFocus) -> { if (!hasFocus) resumeTcpAuto(); };
-        binding.valueAddrTCP.setOnFocusChangeListener(blurListener);
-        binding.valuePortTCP.setOnFocusChangeListener(blurListener);
-
         // UART теперь работает в авто-режиме, свитч не требуется
-        int initBaud;
-        try { initBaud = Integer.parseInt(String.valueOf(binding.valueBaudRate.getText())); }
-        catch (Exception e) { initBaud = 9600; }
+        int initBaud = prefs.getInt(AppState.KEY_UART_BAUD, 115200);
         usbUartManager.enableAutoConnect(initBaud);
 
-        // Подписка на изменения baud: применяем немедленно, но только если ввод валидный int
-        binding.valueBaudRate.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-            @Override public void afterTextChanged(android.text.Editable s) {
-                String text = String.valueOf(s).trim();
-                if (text.isEmpty()) return; // не трогаем, пока поле пустое
-                try {
-                    int b = Integer.parseInt(text);
-                    usbUartManager.setAutoBaud(b);
-                } catch (Exception ignored) {
-                    // игнорируем нечисловой ввод, чтобы не сбрасывать скорость
-                }
-            }
-        });
-    // Визуально отключаем свитч; состояние будет выставляться колбэками статуса
-    binding.switchUART.setChecked(false);
-        binding.switchUART.setEnabled(false);
+    // Инициализация вертикальной полосы состояний
+    initStateStrip();
 
-        // Управление выходами L1–L6: отправляем команды по UART при переключении
-        wireRelaySwitch(binding.switchL1, "L1");
-        wireRelaySwitch(binding.switchL2, "L2");
-        wireRelaySwitch(binding.switchL3, "L3");
-        wireRelaySwitch(binding.switchL4, "L4");
-        wireRelaySwitch(binding.switchL5, "L5");
-        wireRelaySwitch(binding.switchL6, "L6");
+    // Overlay удалён
     }
 
     @Override
@@ -395,48 +301,23 @@ public class MainActivity extends AppCompatActivity {
         uiBuffer.close();
     }
 
-    private void appendToConsole(@NonNull String text) {
-        // Копим в аккумулятор и обрабатываем построчно — это предотвращает неверную подсветку,
-        // когда пачка содержит части строк с разными префиксами
-        consoleRemainder.append(text);
-        int idx;
-        while ((idx = indexOfNewline(consoleRemainder)) >= 0) {
-            String line = consoleRemainder.substring(0, idx + 1);
-            consoleRemainder.delete(0, idx + 1);
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Подхватим актуальные настройки
+        android.content.SharedPreferences prefs = getSharedPreferences(AppState.PREFS_NAME, MODE_PRIVATE);
+        String host = prefs.getString(AppState.KEY_TCP_HOST, "192.168.2.6");
+        int port = prefs.getInt(AppState.KEY_TCP_PORT, 9000);
+        tcpManager.updateTarget(host, port);
 
-            int color = -1;
-            boolean removePrefix = false;
-            int removeLen = 0;
-            if (line.startsWith("[UART→]")) {
-                color = 0xFF90EE90; // LightGreen: TX
-                removePrefix = true; removeLen = "[UART→]".length();
-            } else if (line.startsWith("[UART←]")) {
-                color = 0xFF006400; // DarkGreen: RX
-                removePrefix = true; removeLen = "[UART←]".length();
-            } else if (line.startsWith("[#TCP_TX#]")) {
-                color = 0xFF87CEFA; // LightSkyBlue: TCP TX
-                removePrefix = true; removeLen = "[#TCP_TX#]".length();
-            } else if (line.startsWith("[#TCP_RX#]")) {
-                color = 0xFF0000FF; // Blue: TCP RX
-                removePrefix = true; removeLen = "[#TCP_RX#]".length();
-            }
+        int b = prefs.getInt(AppState.KEY_UART_BAUD, 115200);
+        usbUartManager.setAutoBaud(b);
 
-            if (removePrefix && removeLen > 0) {
-                line = line.substring(removeLen);
-            }
-            if (color != -1) {
-                android.text.SpannableString ss = new android.text.SpannableString(line);
-                ss.setSpan(new android.text.style.ForegroundColorSpan(color), 0, ss.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                binding.textConsole.append(ss);
-            } else {
-                binding.textConsole.append(line);
-            }
-        }
-        int scrollAmount = binding.textConsole.getLayout() != null
-                ? binding.textConsole.getLayout().getLineTop(binding.textConsole.getLineCount()) - binding.textConsole.getHeight()
-                : 0;
-        if (scrollAmount > 0) binding.textConsole.scrollTo(0, scrollAmount);
+    // Overlay удалён
     }
+
+    // На главном экране консоль не отображается
+    private void appendToConsole(@NonNull String text) { /* no-op */ }
 
     private static int indexOfNewline(StringBuilder sb) {
         for (int i = 0; i < sb.length(); i++) {
@@ -448,81 +329,158 @@ public class MainActivity extends AppCompatActivity {
 
     private void toast(String msg) { /* no-op, toasts disabled */ }
 
-    private void hideKeyboardAndClearFocus() {
-        if (binding == null) return;
-        android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        View v1 = binding.valueAddrTCP;
-        View v2 = binding.valuePortTCP;
-        View v3 = binding.valueBaudRate;
-        if (v1 != null) { v1.clearFocus(); if (imm != null) imm.hideSoftInputFromWindow(v1.getWindowToken(), 0); }
-        if (v2 != null) { v2.clearFocus(); if (imm != null) imm.hideSoftInputFromWindow(v2.getWindowToken(), 0); }
-        if (v3 != null) { v3.clearFocus(); if (imm != null) imm.hideSoftInputFromWindow(v3.getWindowToken(), 0); }
-    }
+    // Убраны вспомогательные методы для полей ввода с главного экрана
 
-    private void resumeTcpAuto() {
-        String host = String.valueOf(binding.valueAddrTCP.getText()).trim();
-        int port;
-        try { port = Integer.parseInt(String.valueOf(binding.valuePortTCP.getText()).trim()); }
-        catch (Exception e) { port = -1; }
-        tcpManager.updateTarget(host, port);
-        tcpManager.pauseAuto(false);
-        // Форсируем переподключение к новой цели
-        tcpManager.disconnect();
-    }
+    // ---------------- Новая логика одной вертикальной полосы состояний ----------------
+    private ImageView stateStrip;
+    // 0 означает: состояние ещё не выбрано, не показываем принудительно зелёный при старте
+    private int currentState = 0; // после первого выбора станет 1..5
+    private boolean userInteracted = false; // станет true при первом ACTION_DOWN
+    private int lastResId = 0; // ресурс предыдущего показанного состояния для корректного crossfade
+    private static final long STRIP_ANIM_DURATION = 1000L; // длительность плавного перехода без затемнения
+    private android.animation.ValueAnimator stripAnimator; // активный аниматор кроссфейда
+    // Один временный слой для нового состояния (старое остаётся в самом stateStrip)
+    private ImageView crossNewView; // overlay нового состояния
 
-    private void clearFocusAllInputs() {
-        if (binding == null) return;
-        View v1 = binding.valueAddrTCP;
-        View v2 = binding.valuePortTCP;
-        View v3 = binding.valueBaudRate;
-        if (v1 != null) v1.clearFocus();
-        if (v2 != null) v2.clearFocus();
-        if (v3 != null) v3.clearFocus();
-    }
-
-    private android.widget.Switch getSwitchByRelayNo(int relayNo) {
-        switch (relayNo) {
-            case 1: return binding.switchL1;
-            case 2: return binding.switchL2;
-            case 3: return binding.switchL3;
-            case 4: return binding.switchL4;
-            case 5: return binding.switchL5;
-            case 6: return binding.switchL6;
-            default: return null;
-        }
-    }
-
-    private void wireRelaySwitch(android.widget.Switch switchView, String name) {
-        if (switchView == null) return;
-        // Новая семантика: cmd = 0x01 (включить) или 0x00 (выключить),
-        // data = номер реле (1..6)
-        final int relayNo;
-        switch (name) {
-            case "L1": relayNo = 1; break;
-            case "L2": relayNo = 2; break;
-            case "L3": relayNo = 3; break;
-            case "L4": relayNo = 4; break;
-            case "L5": relayNo = 5; break;
-            case "L6": relayNo = 6; break;
-            default: return;
-        }
-        switchView.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (suppressSwitchCallback) return; // программное изменение из TCP — ничего не отправляем здесь
-            int cmd = isChecked ? 0x01 : 0x00;
-            usbUartManager.sendFramed(cmd, relayNo);
-            // Также отправляем по Wi‑Fi (TCP) тот же смысл: cmd=0x00/0x01, data=[loco(1..8), switch(1..6)]
-            int loco = selectedLoco.get();
-            tcpManager.sendControl(cmd, loco, relayNo);
-            // Локальный лог TX только при активном соединении
-            if (tcpManager.connectionActive()) {
-                String state = cmd == 0x01 ? "on" : "off";
-                uiBuffer.offer("[#TCP_TX#]" + "Tx: loco" + loco + " - " + relayNo + " " + state + "\n");
+    private void initStateStrip() {
+    stateStrip = findViewById(R.id.stateStrip);
+    if (stateStrip == null) return;
+    // Не задаём стартовую картинку здесь — ждём первого взаимодействия или входящих данных
+        stateStrip.setOnTouchListener((v, ev) -> {
+            int action = ev.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
+                if (action == MotionEvent.ACTION_DOWN) {
+                    userInteracted = true; // разрешаем применять входящие внешние состояния
+                }
+                int h = v.getHeight();
+                if (h > 0) {
+                    float y = ev.getY();
+                    int zone = (int)(y / (h / 5f)) + 1; // 1..5
+                    if (zone < 1) zone = 1; else if (zone > 5) zone = 5;
+                    if (currentState == 0) {
+                        // Теперь анимируем и первый показ (fade-in сверху), без затемнения
+                        applyStripState(zone, true, true);
+                    } else if (zone != currentState) {
+                        applyStripState(zone, true, true);
+                    }
+                }
             }
-            // И сразу же логируем UART TX в едином формате и зелёным цветом
-            {
-                String state = cmd == 0x01 ? "on" : "off";
-                uiBuffer.offer("[UART→]" + "Tx: loco" + loco + " - " + relayNo + " " + state + "\n");
-            }
+            return true;
         });
     }
+
+    // maybeStartOverlay() удалён
+
+    private void applyStripState(int state, boolean animate, boolean send) {
+        int res;
+        switch (state) {
+            case 1: res = R.drawable.state_01_green; break;
+            case 2: res = R.drawable.state_02_yellow; break;
+            case 3: res = R.drawable.state_03_red_yellow; break;
+            case 4: res = R.drawable.state_04_red; break;
+            case 5: res = R.drawable.state_05_white; break;
+            default: res = R.drawable.state_01_green; break;
+        }
+        if (stateStrip == null) return;
+
+        // Больше не отключаем анимацию на первом показе — используем чистый fade-in новой картинки
+
+        Drawable newD = AppCompatResources.getDrawable(this, res);
+        if (newD == null) return;
+
+        if (!animate || currentState == 0 || stateStrip.getDrawable() == null) {
+            stateStrip.setAlpha(1f);
+            stateStrip.setImageDrawable(newD);
+        } else {
+            if (stripAnimator != null) { stripAnimator.cancel(); stripAnimator = null; }
+            final Drawable oldDrawable = stateStrip.getDrawable();
+            if (oldDrawable == null) {
+                stateStrip.setImageDrawable(newD);
+                return;
+            }
+            // Гарантируем разовую обёртку (при первой анимации)
+            android.view.ViewParent parent = stateStrip.getParent();
+            android.widget.FrameLayout frame;
+            if (parent instanceof android.widget.FrameLayout) {
+                frame = (android.widget.FrameLayout) parent;
+            } else {
+                android.view.ViewGroup vg = (android.view.ViewGroup) parent;
+                int idx = vg.indexOfChild(stateStrip);
+                vg.removeViewAt(idx);
+                frame = new android.widget.FrameLayout(this);
+                frame.setLayoutParams(stateStrip.getLayoutParams());
+                frame.addView(stateStrip, new android.widget.FrameLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+                vg.addView(frame, idx);
+            }
+            // Базовый ImageView показывает старое состояние, остаётся видимым
+            stateStrip.setImageDrawable(oldDrawable);
+            stateStrip.setAlpha(1f);
+            // Чистим и создаём единственный overlay, если нужно
+            if (crossNewView != null) frame.removeView(crossNewView);
+            crossNewView = new ImageView(this);
+            crossNewView.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            crossNewView.setScaleType(ImageView.ScaleType.FIT_XY);
+            crossNewView.setAdjustViewBounds(false);
+            crossNewView.setImageDrawable(newD);
+            crossNewView.setAlpha(0f);
+            frame.setClipToPadding(false);
+            frame.setClipChildren(false);
+            frame.addView(crossNewView);
+            // Двухфазный анти-затемняющий кроссфейд (phase1: new растёт, phase2: old гаснет)
+            stripAnimator = android.animation.ValueAnimator.ofFloat(0f,1f);
+            stripAnimator.setDuration(STRIP_ANIM_DURATION);
+            stripAnimator.addUpdateListener(a -> {
+                float t = (float)a.getAnimatedValue();
+                if (t <= 0.5f) {
+                    float local = t / 0.5f; // 0..1
+                    float s = local * local * (3f - 2f * local);
+                    crossNewView.setAlpha(s);
+                    stateStrip.setAlpha(1f);
+                } else {
+                    float local = (t - 0.5f) / 0.5f;
+                    float s = local * local * (3f - 2f * local);
+                    crossNewView.setAlpha(1f);
+                    stateStrip.setAlpha(1f - s);
+                }
+            });
+            stripAnimator.addListener(new android.animation.AnimatorListenerAdapter(){
+                @Override public void onAnimationEnd(android.animation.Animator animation) { finishSingleOverlayCrossfade(frame, newD); }
+                @Override public void onAnimationCancel(android.animation.Animator animation) { finishSingleOverlayCrossfade(frame, newD); }
+            });
+            stripAnimator.start();
+        }
+
+        if (send) {
+            sendExclusiveRelays(state);
+        }
+    currentState = state; // overlay удалён, глобальная синхронизация не требуется
+        lastResId = res;
+    }
+
+    private void finishSingleOverlayCrossfade(android.widget.FrameLayout frame, Drawable finalDrawable){
+        if (crossNewView != null) frame.removeView(crossNewView);
+        crossNewView = null;
+        stateStrip.setImageDrawable(finalDrawable);
+        stateStrip.setAlpha(1f);
+    }
+
+    private void sendExclusiveRelays(int active) {
+        int loco = AppState.selectedLoco.get();
+        // Основной источник управляющих команд (overlay ограничен TCP чтобы не дублировать UART)
+        for (int i = 1; i <= 5; i++) {
+            int cmd = (i == active) ? 0x01 : 0x00;
+            usbUartManager.sendFramed(cmd, i);
+            tcpManager.sendControl(cmd, loco, i);
+            String state = cmd == 0x01 ? "on" : "off";
+            if (tcpManager.connectionActive()) {
+                uiBuffer.offer("[#TCP_TX#]" + "Tx: loco" + loco + " - " + i + " " + state + "\n");
+            }
+            uiBuffer.offer("[UART→]" + "Tx: loco" + loco + " - " + i + " " + state + "\n");
+        }
+    }
+    // -------------------------------------------------------------------------------
 }

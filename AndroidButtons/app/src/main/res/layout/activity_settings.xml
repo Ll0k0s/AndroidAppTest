@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/title_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Статус подключений"
+            android:textStyle="bold"
+            android:textSize="20sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="8dp">
+
+            <TextView
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:text="UART" />
+
+            <Switch
+                android:id="@+id/switch_UART_indicator"
+                android:layout_width="48sp"
+                android:layout_height="48sp"
+                android:enabled="false"
+                android:thumbTint="@color/switch_thumb" />
+
+            <ProgressBar
+                android:id="@+id/progressBarUART_indicator"
+                style="?android:attr/progressBarStyle"
+                android:layout_width="48sp"
+                android:layout_height="24sp"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp">
+
+            <TextView
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:text="TCP" />
+
+            <Switch
+                android:id="@+id/switch_TCP_indicator"
+                android:layout_width="48sp"
+                android:layout_height="48sp"
+                android:enabled="false"
+                android:thumbTint="@color/switch_thumb" />
+
+            <ProgressBar
+                android:id="@+id/progressBarTCP_indicator"
+                style="?android:attr/progressBarStyle"
+                android:layout_width="48sp"
+                android:layout_height="24sp"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/title_usb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="USB UART"
+            android:textStyle="bold"
+            android:textSize="20sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="8dp">
+
+            <TextView
+                android:layout_width="100sp"
+                android:layout_height="wrap_content"
+                android:text="Baud Rate:" />
+
+            <EditText
+                android:id="@+id/value_baudRate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="number"
+                android:text="115200" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#444"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/title_tcp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TCP"
+            android:textStyle="bold"
+            android:textSize="20sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="8dp">
+
+            <TextView
+                android:layout_width="100sp"
+                android:layout_height="wrap_content"
+                android:text="Address:" />
+
+            <EditText
+                android:id="@+id/value_addrTCP"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="text"
+                android:text="192.168.2.6" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="8dp">
+
+            <TextView
+                android:layout_width="100sp"
+                android:layout_height="wrap_content"
+                android:text="Port:" />
+
+            <EditText
+                android:id="@+id/value_portTCP"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="number"
+                android:text="9000" />
+        </LinearLayout>
+
+        <Spinner
+            android:id="@+id/spinner_num"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" />
+
+        <TextView
+            android:id="@+id/console_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Console"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/text_console"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:text="..."
+            android:background="#222"
+            android:padding="8dp" />
+
+    </LinearLayout>
+</ScrollView>

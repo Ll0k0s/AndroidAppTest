@@ -6,4 +6,6 @@
     <string name="portTCP">Port:</string>
     <string name="baudRate">Baud Rate:</string>
     <string name="but_connect">Connect</string>
+    <string name="overlay_permission_hint">Enable overlay permission to show the floating panel.</string>
+    <string name="overlay_permission_settings_unavailable">Unable to open overlay settings. Please enable the permission manually.</string>
 </resources>
